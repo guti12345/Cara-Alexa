@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Agente peluche con brazos</title>
+    <style>
+        :root {
+            --bg-dark: #111111;
+            --bg-light: #2a2a2a;
+            --blue-light: #4db8ff;
+            --blue-dark: #2980b9;
+            --eye-white: #ffffff;
+            --iris-center: #8d6e63;
+            --iris-edge: #3e2723;
+            --pupil: #000000;
+            --lid: #171717;
+        }
+
+        html, body { height: 100%; }
+
+        body {
+            background: radial-gradient(circle at center bottom, var(--bg-light), var(--bg-dark));
+            margin: 0;
+            height: 100vh;
+            padding-bottom: 60px;
+            box-sizing: border-box;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Segoe UI', Arial, sans-serif;
+            cursor: none;
+            -webkit-user-select: none; user-select: none;
+            touch-action: manipulation;
+        }
+        body.debug { cursor: default; }
+
+        /* Zona táctil: tocar la pantalla empieza o pausa la conversación */
+        #tapzone { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 1; }
+
+        #stage { transform-origin: center center; position: relative; z-index: 2; pointer-events: none; }
+
+        .face-container { position: relative; display: flex; flex-direction: column; align-items: center; }
+
+        /* ================= PELUCHE ================= */
+        .plush { position: relative; width: 340px; height: 330px; animation: respira 4.5s ease-in-out infinite; will-change: transform; }
+        @keyframes respira { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.012); } }
+
+        /* Capucha de pelo (dibujo vectorial) */
+        .hood { position: absolute; left: 0; top: 0; }
+
+        /* Cara */
+        .visage {
+            position: absolute; left: 70px; top: 76px; width: 200px; height: 166px;
+            border-radius: 48% / 52%;
+            background: radial-gradient(ellipse at 50% 38%, #f8dfc4 0%, #f0cba9 62%, #e4b48f 100%);
+            box-shadow: 0 0 0 7px #efe3cf, 0 0 12px 9px rgba(239,227,207,0.65), inset 0 12px 18px -4px rgba(120,80,50,0.32);
+        }
+
+        /* Mejillas */
+        .cheek {
+            position: absolute; top: 86px; width: 72px; height: 50px; border-radius: 50%;
+            background: radial-gradient(ellipse, rgba(255,105,125,0.62) 0%, rgba(255,105,125,0) 72%);
+            transition: opacity 0.4s, transform 0.4s;
+        }
+        .cheek.l { left: 2px; }
+        .cheek.r { right: 2px; }
+
+        /* Cejas (solo aparecen al expresar algo) */
+        .brow {
+            position: absolute; top: 28px; width: 28px; height: 5px; border-radius: 5px;
+            background: #8a5d45; opacity: 0;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .brow.left { left: 36px; }
+        .brow.right { right: 36px; }
+
+        /* Ojos */
+        .eye-socket {
+            position: absolute; top: 46px; width: 24px; height: 30px;
+            transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .eye-socket.l { left: 40px; }
+        .eye-socket.r { right: 40px; }
+        .iris-group {
+            position: absolute; top: 50%; left: 50%; width: 100%; height: 100%;
+            transform: translate(-50%, -50%);
+            transition: transform 0.18s ease-out;
+        }
+        .eye {
+            position: relative; width: 100%; height: 100%;
+            background: radial-gradient(circle at 40% 35%, #2b211e 0%, #130e0d 70%);
+            border-radius: 50%;
+            transition: transform 70ms ease-in;
+        }
+        .eye::after {
+            content: ''; position: absolute; top: 16%; right: 18%; width: 30%; height: 26%;
+            background: #fff; border-radius: 50%; opacity: 0.95;
+        }
+        .eye::before {
+            content: ''; position: absolute; bottom: 20%; left: 22%; width: 14%; height: 12%;
+            background: #fff; border-radius: 50%; opacity: 0.55;
+        }
+        #stage.blinking .eye { transform: scaleY(0.08); }
+
+        /* Boca */
+        .mouth-row { position: absolute; left: 0; right: 0; top: 106px; display: flex; justify-content: center; }
+        .mouth-wrap { transform-origin: 50% 0; }
+        .mouth {
+            position: relative; width: 34px; height: 13px;
+            border-bottom: 3px solid #7a4b3a;
+            border-radius: 0 0 50% 50% / 0 0 100% 100%;
+            transition: all 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
+        }
+        .mouth-fill {
+            position: absolute; left: 0; right: 0; top: 0; bottom: 0;
+            background: #8f3b3b; border-radius: inherit; opacity: 0;
+        }
+
+        /* ================= EMOCIONES ================= */
+        /* FELIZ */
+        .face-container.happy .eye-socket { transform: scaleY(0.8); }
+        .face-container.happy .cheek { transform: scale(1.2); }
+        .face-container.happy .mouth { width: 48px; height: 21px; }
+
+        /* TRISTE */
+        .face-container.sad .eye-socket.l { transform: rotate(12deg); }
+        .face-container.sad .eye-socket.r { transform: rotate(-12deg); }
+        .face-container.sad .brow { opacity: 1; }
+        .face-container.sad .brow.left { transform: rotate(-16deg) translateY(1px); }
+        .face-container.sad .brow.right { transform: rotate(16deg) translateY(1px); }
+        .face-container.sad .cheek { opacity: 0.45; }
+        .face-container.sad .mouth {
+            width: 30px; height: 11px; transform: translateY(7px);
+            border-bottom: 0; border-top: 3px solid #7a4b3a;
+            border-radius: 50% 50% 0 0 / 100% 100% 0 0;
+        }
+
+        /* ENFADO */
+        .face-container.angry .eye-socket { transform: scale(0.9); }
+        .face-container.angry .brow { opacity: 1; top: 34px; }
+        .face-container.angry .brow.left { transform: rotate(18deg); }
+        .face-container.angry .brow.right { transform: rotate(-18deg); }
+        .face-container.angry .mouth { width: 24px; height: 0; border-radius: 3px; transform: translateY(5px); }
+
+        /* SORPRESA */
+        .face-container.surprised .eye-socket { transform: scale(1.25); }
+        .face-container.surprised .brow { opacity: 1; top: 22px; }
+        .face-container.surprised .brow.left { transform: rotate(-6deg); }
+        .face-container.surprised .brow.right { transform: rotate(6deg); }
+        .face-container.surprised .mouth {
+            width: 16px; height: 20px; border: 3px solid #7a4b3a; border-radius: 50%; transform: translateY(2px);
+        }
+
+        /* PENSATIVO */
+        .face-container.thinking .brow.left { opacity: 1; transform: translateY(-7px) rotate(-8deg); }
+        .face-container.thinking .eye-socket.l { transform: scale(1.05); }
+        .face-container.thinking .mouth { width: 18px; height: 3px; transform: translateX(10px); border-radius: 3px; }
+
+        /* ESCUCHANDO */
+        .face-container.listening .eye-socket { transform: scale(1.14); }
+        .face-container.listening .cheek { transform: scale(1.08); }
+        .face-container.listening .mouth { width: 26px; height: 9px; }
+
+        /* ================= BRAZOS ================= */
+        /* El hombro está en el borde del cuerpo; cada brazo gira desde ahí.
+           Ángulo positivo = el brazo izquierdo se abre hacia fuera; en el derecho, el negativo. */
+        .arm { position: absolute; top: 183px; width: 64px; height: 110px; transform-origin: 50% 20%;
+               transition: transform 0.6s cubic-bezier(0.34, 1.56, 0.64, 1); }
+        .arm.l { left: -18px; transform: rotate(8deg); }
+        .arm.r { left: 294px; transform: rotate(-8deg); }
+        .arm.r svg { transform: scaleX(-1); }
+        .arm-sway, .arm-beat { width: 100%; height: 100%; transform-origin: 50% 20%; }
+        .arm svg { display: block; }
+
+        @keyframes saluda   { 0%, 100% { transform: rotate(0deg); } 50% { transform: rotate(-17deg); } }
+        @keyframes alegra   { 0%, 100% { transform: rotate(-5deg); } 50% { transform: rotate(5deg); } }
+        @keyframes tiembla  { 0%, 100% { transform: rotate(-2deg); } 50% { transform: rotate(2deg); } }
+        @keyframes piensa   { 0%, 100% { transform: rotate(-4deg); } 50% { transform: rotate(6deg); } }
+
+        /* FELIZ: brazos abiertos con un balanceo alegre */
+        .face-container.happy .arm.l { transform: rotate(38deg); }
+        .face-container.happy .arm.r { transform: rotate(-38deg); }
+        .face-container.happy .arm .arm-sway { animation: alegra 1.3s ease-in-out infinite; }
+
+        /* SALUDO: el brazo derecho arriba, saludando */
+        .face-container.wave .arm.l { transform: rotate(10deg); }
+        .face-container.wave .arm.r { transform: rotate(-150deg); }
+        .face-container.wave .arm.l .arm-sway { animation: none; }
+        .face-container.wave .arm.r .arm-sway { animation: saluda 0.75s ease-in-out infinite; }
+
+        /* TRISTE: brazos caídos y pegados al cuerpo */
+        .face-container.sad .arm.l { transform: rotate(-7deg); }
+        .face-container.sad .arm.r { transform: rotate(7deg); }
+
+        /* ENFADO: brazos rígidos hacia fuera, temblando un poco */
+        .face-container.angry .arm.l { transform: rotate(26deg); }
+        .face-container.angry .arm.r { transform: rotate(-26deg); }
+        .face-container.angry .arm .arm-sway { animation: tiembla 0.14s linear infinite; }
+
+        /* SORPRESA: los dos brazos arriba */
+        .face-container.surprised .arm.l { transform: rotate(148deg); }
+        .face-container.surprised .arm.r { transform: rotate(-148deg); }
+
+        /* PENSATIVO: un brazo levantado y moviéndose despacio */
+        .face-container.thinking .arm.l { transform: rotate(6deg); }
+        .face-container.thinking .arm.r { transform: rotate(-82deg); }
+        .face-container.thinking .arm.r .arm-sway { animation: piensa 2.6s ease-in-out infinite; }
+
+        /* ESCUCHANDO: brazos algo separados, atentos */
+        .face-container.listening .arm.l { transform: rotate(22deg); }
+        .face-container.listening .arm.r { transform: rotate(-22deg); }
+
+        /* SUBTÍTULO */
+        #caption {
+            position: fixed; left: 0; right: 0; bottom: 12px; z-index: 3;
+            text-align: center; color: #9fb4c4; font-size: 22px; line-height: 1.25;
+            padding: 0 5%; pointer-events: none; min-height: 28px;
+        }
+
+        #hint {
+            position: fixed; top: 16px; left: 0; right: 0; z-index: 3; text-align: center;
+            font-size: 18px; color: #7f93a3; pointer-events: none; opacity: 0; transition: opacity 0.3s;
+        }
+
+        /* AJUSTES */
+        #bGear {
+            position: fixed; top: 10px; right: 10px; z-index: 6;
+            width: 52px; height: 52px; border-radius: 26px; padding: 0; margin: 0;
+            background: rgba(255,255,255,0.08); border: 0; color: #fff; font-size: 26px; opacity: 0.5;
+        }
+        .overlay {
+            display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 20;
+            background: rgba(0,0,0,0.88); overflow: auto;
+        }
+        .panel { max-width: 560px; margin: 20px auto; padding: 18px 22px; color: #eee; font-size: 20px; }
+        .panel h2 { margin: 0 0 8px; color: var(--blue-light); font-size: 26px; }
+        .panel label { display: block; margin-top: 12px; }
+        .panel input[type=password], .panel input[type=text], .panel select {
+            width: 100%; box-sizing: border-box; font-size: 20px; padding: 10px; margin-top: 6px;
+            background: #222; color: #fff; border: 1px solid #555; border-radius: 8px;
+        }
+        .panel input[type=range] { width: 100%; margin-top: 8px; }
+        #settingsMsg { color: #fc6; min-height: 24px; }
+
+        button {
+            background: #2980b9; color: #fff; border: 0; border-radius: 10px;
+            padding: 12px 18px; margin: 8px 8px 0 0; font-size: 20px; cursor: pointer;
+        }
+        button.small { background: #444; font-size: 16px; padding: 8px 12px; }
+
+        /* MODO PRUEBA (?debug) */
+        #debug {
+            display: none; position: fixed; bottom: 52px; left: 0; right: 0; z-index: 7;
+            text-align: center;
+        }
+        body.debug #debug { display: block; }
+        #debug input { width: 50%; font-size: 18px; padding: 8px; border-radius: 8px; border: 1px solid #555; background: #222; color: #fff; }
+        #debug button { font-size: 15px; padding: 7px 12px; margin: 3px; }
+    </style>
+</head>
+<body>
+
+    <div id="tapzone"></div>
+
+    <div id="stage">
+        <div class="face-container" id="robotFace">
+            <div class="plush">
+                <div class="arm l"><div class="arm-sway"><div class="arm-beat" id="armBeatL">
+                    <svg width="64" height="110" viewBox="0 0 64 110" aria-hidden="true">
+                        <g filter="url(#fuzzArm)"><path d="M32 4 C50 4 60 16 60 34 L56 76 C54 98 46 106 32 106 C18 106 10 98 8 76 L4 34 C4 16 14 4 32 4 Z" fill="url(#fg)"/></g>
+                        <rect width="64" height="110" filter="url(#grain)" clip-path="url(#clipArm)" opacity="0.55"/>
+                    </svg>
+                </div></div></div>
+                <div class="arm r"><div class="arm-sway"><div class="arm-beat" id="armBeatR">
+                    <svg width="64" height="110" viewBox="0 0 64 110" aria-hidden="true">
+                        <g filter="url(#fuzzArm)"><path d="M32 4 C50 4 60 16 60 34 L56 76 C54 98 46 106 32 106 C18 106 10 98 8 76 L4 34 C4 16 14 4 32 4 Z" fill="url(#fg)"/></g>
+                        <rect width="64" height="110" filter="url(#grain)" clip-path="url(#clipArm)" opacity="0.55"/>
+                    </svg>
+                </div></div></div>
+                <svg class="hood" width="340" height="330" viewBox="0 0 340 330" aria-hidden="true">
+                    <defs>
+                        <radialGradient id="fg" cx="50%" cy="24%" r="85%">
+                            <stop offset="0" stop-color="#f9f1e3"/>
+                            <stop offset="0.6" stop-color="#eee1cc"/>
+                            <stop offset="1" stop-color="#d9c6a6"/>
+                        </radialGradient>
+                        <linearGradient id="fade" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="0.76" stop-color="#fff"/>
+                            <stop offset="1" stop-color="#000"/>
+                        </linearGradient>
+                        <mask id="fadeMask"><rect width="340" height="330" fill="url(#fade)"/></mask>
+                        <clipPath id="shape"><path d="M8 250 C0 135 42 22 170 22 C298 22 340 135 332 250 C328 300 296 326 250 326 L90 326 C44 326 12 300 8 250 Z"/></clipPath>
+                        <filter id="fuzz" x="-6%" y="-6%" width="112%" height="112%">
+                            <feTurbulence type="fractalNoise" baseFrequency="0.11" numOctaves="2" seed="4" result="n"/>
+                            <feDisplacementMap in="SourceGraphic" in2="n" scale="10" xChannelSelector="R" yChannelSelector="G"/>
+                        </filter>
+                        <filter id="grain" x="0" y="0" width="100%" height="100%">
+                            <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" seed="9"/>
+                            <feColorMatrix values="0 0 0 0 0.45  0 0 0 0 0.32  0 0 0 0 0.20  0 0 0 1.1 -0.38"/>
+                        </filter>
+                        <filter id="fuzzArm" x="-25%" y="-15%" width="150%" height="130%">
+                            <feTurbulence type="fractalNoise" baseFrequency="0.11" numOctaves="2" seed="6" result="n"/>
+                            <feDisplacementMap in="SourceGraphic" in2="n" scale="7" xChannelSelector="R" yChannelSelector="G"/>
+                        </filter>
+                        <clipPath id="clipArm"><path d="M32 4 C50 4 60 16 60 34 L56 76 C54 98 46 106 32 106 C18 106 10 98 8 76 L4 34 C4 16 14 4 32 4 Z"/></clipPath>
+                    </defs>
+                    <g>
+                        <g filter="url(#fuzz)">
+                            <path d="M8 250 C0 135 42 22 170 22 C298 22 340 135 332 250 C328 300 296 326 250 326 L90 326 C44 326 12 300 8 250 Z" fill="url(#fg)"/>
+                        </g>
+                        <rect width="340" height="330" filter="url(#grain)" clip-path="url(#shape)" opacity="0.55"/>
+                    </g>
+                </svg>
+                <div class="visage">
+                    <div class="cheek l"></div><div class="cheek r"></div>
+                    <div class="brow left"></div><div class="brow right"></div>
+                    <div class="eye-socket l"><div class="iris-group"><div class="eye"></div></div></div>
+                    <div class="eye-socket r"><div class="iris-group"><div class="eye"></div></div></div>
+                    <div class="mouth-row">
+                        <div class="mouth-wrap" id="mouthWrap"><div class="mouth"><div class="mouth-fill" id="mouthFill"></div></div></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="caption"></div>
+    <div id="hint"></div>
+
+    <button id="bGear" aria-label="Ajustes">&#9881;</button>
+
+    <div id="debug">
+        <input id="dbgText" type="text" placeholder="Escribe aquí para probar sin micrófono">
+        <button id="dbgSend">Enviar</button>
+        <button onclick="Cara.emotion('saludo')">Saludo</button>
+        <button onclick="Cara.emotion('alegre')">Feliz</button>
+        <button onclick="Cara.emotion('triste')">Triste</button>
+        <button onclick="Cara.emotion('enfadado')">Enojo</button>
+        <button onclick="Cara.emotion('sorprendido')">Sorpresa</button>
+        <button onclick="Cara.emotion('pensativo')">Pensativo</button>
+    </div>
+
+    <div id="settings" class="overlay">
+        <div class="panel">
+            <h2>Ajustes</h2>
+            <div id="settingsMsg"></div>
+            <label for="keyInput">Clave de Claude (se guarda solo en este aparato)</label>
+            <input id="keyInput" type="password" autocomplete="off" placeholder="sk-ant-...">
+            <label><input type="checkbox" id="showKey"> Mostrar clave</label>
+            <label for="bargeSel">Interrumpir al agente cuando habla</label>
+            <select id="bargeSel">
+                <option value="touch">Tocando la pantalla</option>
+                <option value="voz">Tocando o hablando encima (experimental)</option>
+            </select>
+            <label for="voiceSel">Voz</label>
+            <select id="voiceSel"></select>
+            <label for="rateInput">Velocidad de la voz: <span id="rateVal"></span></label>
+            <input id="rateInput" type="range" min="0.7" max="1.3" step="0.05" value="1">
+            <div>
+                <button id="bTestVoice">Probar voz</button>
+                <button id="bSave">Guardar</button>
+                <button id="bClose">Cerrar</button>
+            </div>
+            <div><button id="bClearKey" class="small">Borrar la clave guardada</button></div>
+        </div>
+    </div>
+
+    <script>
+    (function () {
+        'use strict';
+
+        // =====================================================
+        //  CONFIGURACIÓN
+        // =====================================================
+        var CONFIG = {
+            MODEL: 'claude-haiku-5-5',
+            API_URL: 'https://api.anthropic.com/v1/messages',
+            PROXY_URL: '',          // si algún día usas un servidor intermedio, ponlo aquí y ya no hará falta la clave
+            LANG: 'es-ES',
+            MAX_HISTORY: 12,        // mensajes que recuerda
+            API_TIMEOUT_MS: 25000,
+            GREETING: 'Hola, estoy aquí para charlar. ¿De qué quieres hablar?',
+            SYLLABLE_MS: 200,       // ritmo medio de sílabas al hablar
+            IDLE_PAUSE_MS: 60000    // si no oye nada durante este tiempo, se pausa sola
+        };
+
+        var SYSTEM_PROMPT =
+            'Eres un compañero de conversación amable y paciente que habla por voz a través de un altavoz con pantalla. ' +
+            'Responde siempre en español, con frases cortas y naturales (máximo 2 o 3 frases), sin listas, sin markdown, sin emojis y sin URLs. ' +
+            'Si no entiendes algo, pídelo con amabilidad. ' +
+            'Devuelve SOLO un JSON válido con este formato exacto, sin texto adicional: ' +
+            '{"texto": "lo que dices en voz alta", "emocion": "neutral|alegre|triste|sorprendido|pensativo|enfadado"}. ' +
+            'Elige la emoción que mejor acompañe a tu respuesta.';
+
+        // =====================================================
+        //  ELEMENTOS Y ALMACÉN
+        // =====================================================
+        var $ = function (id) { return document.getElementById(id); };
+        var stage = $('stage'), face = $('robotFace'), mouthWrap = $('mouthWrap'), mouthFill = $('mouthFill'), armBeatL = $('armBeatL'), armBeatR = $('armBeatR');
+        var captionEl = $('caption'), hintEl = $('hint'), bargeSel = $('bargeSel'), settingsEl = $('settings'), settingsMsg = $('settingsMsg');
+        var keyInput = $('keyInput'), voiceSel = $('voiceSel'), rateInput = $('rateInput'), rateVal = $('rateVal');
+        var irisGroups = document.querySelectorAll('.iris-group');
+        var DEBUG = /[?&]debug/.test(location.search);
+
+        var store = {
+            get: function (k) { try { return localStorage.getItem('agente_' + k); } catch (e) { return null; } },
+            set: function (k, v) { try { localStorage.setItem('agente_' + k, v); } catch (e) {} },
+            del: function (k) { try { localStorage.removeItem('agente_' + k); } catch (e) {} }
+        };
+
+        // =====================================================
+        //  ESTADO
+        // =====================================================
+        var SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+        var phase = 'idle';          // idle | listening | thinking | speaking
+        var active = false;          // conversación en marcha
+        var base = '';               // emoción de fondo
+        var isListening = false, isWaiting = false, talking = false;
+        var greeted = false, reqId = 0, speakToken = 0;
+        var history = [];
+        var agentWords = {}, speakingClaude = false;
+        var rec = null;
+        var gain = 0.9;
+
+        var CSS_CLASS = {
+            neutral: '', neutro: '', happy: 'happy', alegre: 'happy', feliz: 'happy',
+            sad: 'sad', triste: 'sad', angry: 'angry', enfadado: 'angry', enojo: 'angry',
+            surprised: 'surprised', sorprendido: 'surprised', sorpresa: 'surprised',
+            thinking: 'thinking', pensativo: 'thinking',
+            saludo: 'happy wave'
+        };
+        var MOUTH_GAIN = { '': 1.2, happy: 0.9, sad: 1.0, angry: 5, surprised: 0.45, thinking: 5, listening: 1.5, 'happy wave': 0.9 };
+
+        function render() {
+            var key = base;
+            if (!talking) {
+                if (isListening) key = 'listening';
+                else if (isWaiting) key = 'thinking';
+            }
+            face.className = 'face-container' + (key ? ' ' + key : '');
+            gain = MOUTH_GAIN[key] !== undefined ? MOUTH_GAIN[key] : 0.9;
+        }
+        function setEmotion(name) {
+            var cls = CSS_CLASS[String(name || 'neutral').toLowerCase()];
+            base = cls === undefined ? '' : cls;
+            render();
+        }
+        function setCaption(t) { captionEl.textContent = t || ''; }
+
+        var HINTS = { idle: 'Toca la pantalla para hablar', listening: 'Te escucho…', thinking: 'Pensando…', speaking: '' };
+        function setPhase(p, text) {
+            phase = p;
+            isListening = (p === 'listening');
+            isWaiting = (p === 'thinking');
+            setCaption(text !== undefined ? text : HINTS[p]);
+            hintEl.textContent = bargeMode() === 'voz' ? 'Toca la pantalla o habla para interrumpir' : 'Toca la pantalla para interrumpir';
+            hintEl.style.opacity = (p === 'speaking') ? '1' : '0';
+            render();
+        }
+
+        // =====================================================
+        //  ESCALADO, MIRADA Y PARPADEO
+        // =====================================================
+        function fit() {
+            var s = Math.min(window.innerWidth / 460, (window.innerHeight - 70) / 380) * 0.95;
+            stage.style.transform = 'scale(' + s + ')';
+        }
+        window.addEventListener('resize', fit);
+        fit();
+
+        var GAZE = 0.3;   // los ojos son pequeños: la mirada se mueve menos
+        function setGaze(x, y) {
+            for (var i = 0; i < irisGroups.length; i++) {
+                irisGroups[i].style.transform = 'translate(-50%, -50%) translate(' + (x * GAZE) + 'px, ' + (y * GAZE) + 'px)';
+            }
+        }
+        function gazeLoop() {
+            if (isWaiting && !isListening && !talking) setGaze(-22, -30);
+            else if (isListening) setGaze(0, 0);
+            else if (Math.random() < 0.3) setGaze(0, 0);
+            else setGaze(Math.round((Math.random() - 0.5) * 44), Math.round((Math.random() - 0.5) * 24));
+            setTimeout(gazeLoop, 1800 + Math.random() * 2800);
+        }
+        gazeLoop();
+
+        function blink() {
+            stage.classList.add('blinking');
+            setTimeout(function () { stage.classList.remove('blinking'); }, 130);
+        }
+        function blinkLoop() {
+            blink();
+            if (Math.random() < 0.15) setTimeout(blink, 260);
+            setTimeout(blinkLoop, 2800 + Math.random() * 3200);
+        }
+        setTimeout(blinkLoop, 1500);
+
+        // =====================================================
+        //  BOCA: sílabas del texto, ajustadas a los avisos de la voz
+        // =====================================================
+        var VOWEL_AMP = { a: 1, o: 0.85, e: 0.7, u: 0.55, i: 0.4 };
+        var VOWEL_BASE = { 'á': 'a', 'é': 'e', 'í': 'i', 'ó': 'o', 'ú': 'u', 'ü': 'u' };
+
+        function segsForWord(word) {
+            var segs = [];
+            var groups = word.toLowerCase().match(/[aeiouáéíóúü]+/g) || ['a'];
+            for (var g = 0; g < groups.length; g++) {
+                var ch = groups[g].charAt(0);
+                ch = VOWEL_BASE[ch] || ch;
+                var amp = (VOWEL_AMP[ch] || 0.6) * (0.85 + Math.random() * 0.3);
+                segs.push({ dur: CONFIG.SYLLABLE_MS * (0.85 + Math.random() * 0.3), amp: Math.min(1, amp) });
+            }
+            var last = word.charAt(word.length - 1);
+            if (/[,;:]/.test(last)) segs.push({ dur: 220, amp: 0 });
+            else if (/[.!?…]/.test(last)) segs.push({ dur: 380, amp: 0 });
+            else segs.push({ dur: 50, amp: 0 });
+            return segs;
+        }
+
+        var talk = { on: false, words: [], starts: [], wi: -1, cur: [], seg: null, segStart: 0, boundarySeen: false };
+        var openNow = 0, armEnergy = 0, armsMoving = false;
+
+        function prepareWords(texto) {
+            var re = /\S+/g, m;
+            talk.words = []; talk.starts = [];
+            while ((m = re.exec(texto)) !== null) {
+                talk.starts.push(m.index);
+                talk.words.push(segsForWord(m[0]));
+            }
+            talk.wi = -1; talk.cur = []; talk.seg = null; talk.boundarySeen = false;
+        }
+        function loadWord(i, when) {
+            talk.wi = i;
+            talk.cur = (talk.words[i] || []).slice();
+            talk.seg = talk.cur.shift() || null;
+            talk.segStart = when;
+        }
+        function estimateMs() {
+            var total = 0;
+            for (var i = 0; i < talk.words.length; i++)
+                for (var j = 0; j < talk.words[i].length; j++) total += talk.words[i][j].dur;
+            return total;
+        }
+        function startTalk() {
+            if (talk.on) return;
+            talk.on = true;
+            talking = true;
+            loadWord(0, performance.now());
+            render();
+        }
+        function stopTalk() {
+            talk.on = false;
+            talking = false;
+            talk.seg = null; talk.cur = [];
+            render();
+        }
+        function onBoundary(e) {
+            if (!talk.on || e.charIndex === undefined) return;
+            talk.boundarySeen = true;
+            var idx = 0;
+            for (var i = 0; i < talk.starts.length; i++) { if (talk.starts[i] <= e.charIndex) idx = i; else break; }
+            if (idx !== talk.wi) loadWord(idx, performance.now());
+        }
+
+        function frame() {
+            var now = performance.now();
+            var target = 0;
+            if (talk.on) {
+                var t = now - talk.segStart, guard = 0;
+                while (talk.seg && t >= talk.seg.dur && guard < 40) {
+                    t -= talk.seg.dur;
+                    talk.segStart += talk.seg.dur;
+                    talk.seg = talk.cur.shift() || null;
+                    if (!talk.seg && !talk.boundarySeen && talk.wi + 1 < talk.words.length) {
+                        loadWord(talk.wi + 1, talk.segStart);   // sin avisos de la voz: seguimos el ritmo del texto
+                    }
+                    guard++;
+                }
+                if (guard >= 40) talk.segStart = now;
+                if (talk.seg && talk.seg.amp > 0) {
+                    target = talk.seg.amp * Math.pow(Math.sin(Math.PI * Math.min(1, Math.max(0, now - talk.segStart) / talk.seg.dur)), 0.8);
+                }
+            }
+            openNow += (target - openNow) * 0.55;
+            if (openNow < 0.002) openNow = 0;
+            mouthWrap.style.transform = 'scale(' + (1 + 0.05 * openNow) + ',' + (1 + gain * openNow) + ')';
+            mouthFill.style.opacity = Math.min(1, openNow * 3.2);
+
+            // Gestos al hablar: la energía de la voz (suavizada) mueve los brazos despacio
+            armEnergy += ((talk.on ? openNow : 0) - armEnergy) * 0.04;
+            if (armEnergy > 0.004) {
+                var tt = now / 1000;
+                armBeatL.style.transform = 'rotate(' + (armEnergy * 18 * Math.sin(tt * 4.1)).toFixed(2) + 'deg)';
+                armBeatR.style.transform = 'rotate(' + (armEnergy * 18 * Math.sin(tt * 3.3 + 1.7)).toFixed(2) + 'deg)';
+                armsMoving = true;
+            } else if (armsMoving) {
+                armBeatL.style.transform = ''; armBeatR.style.transform = ''; armsMoving = false;
+            }
+            requestAnimationFrame(frame);
+        }
+        requestAnimationFrame(frame);
+
+        // =====================================================
+        //  VOZ (texto a voz)
+        // =====================================================
+        var voices = [];
+        function isSpanish(v) { return /^es/i.test(String(v.lang).replace('_', '-')); }
+
+        function loadVoices() {
+            try { voices = (window.speechSynthesis && window.speechSynthesis.getVoices()) || []; } catch (e) { voices = []; }
+            var saved = store.get('voice') || '';
+            voiceSel.innerHTML = '';
+            var auto = document.createElement('option');
+            auto.value = ''; auto.textContent = 'Automática (español)';
+            voiceSel.appendChild(auto);
+            for (var i = 0; i < voices.length; i++) {
+                if (!isSpanish(voices[i])) continue;
+                var o = document.createElement('option');
+                o.value = voices[i].name;
+                o.textContent = voices[i].name + ' (' + voices[i].lang + ')';
+                if (voices[i].name === saved) o.selected = true;
+                voiceSel.appendChild(o);
+            }
+        }
+        function pickVoice() {
+            var saved = store.get('voice'), i;
+            if (saved) for (i = 0; i < voices.length; i++) if (voices[i].name === saved) return voices[i];
+            for (i = 0; i < voices.length; i++) if (String(voices[i].lang).replace('_', '-').toLowerCase() === 'es-es') return voices[i];
+            for (i = 0; i < voices.length; i++) if (isSpanish(voices[i])) return voices[i];
+            return null;
+        }
+        function currentRate() {
+            var r = parseFloat(store.get('rate'));
+            return (r >= 0.5 && r <= 2) ? r : 1;
+        }
+        function cleanText(t) {
+            t = String(t || '').replace(/[*_#`~]/g, '').replace(/\s+/g, ' ').trim();
+            try { t = t.replace(new RegExp('[\\u{1F300}-\\u{1FAFF}\\u{2600}-\\u{27BF}]', 'gu'), ''); } catch (e) {}
+            return t;
+        }
+
+        function cancelSpeech() {
+            speakToken++;
+            try { if (window.speechSynthesis && (speechSynthesis.speaking || speechSynthesis.pending)) speechSynthesis.cancel(); } catch (e) {}
+            stopTalk();
+        }
+
+        function speak(texto, emocion, done, isClaude) {
+            var token = ++speakToken;
+            texto = cleanText(texto) || '...';
+            speakingClaude = !!isClaude;
+            agentWords = wordMap(texto);
+            setEmotion(emocion);
+            setPhase('speaking', texto);
+            prepareWords(texto);
+
+            var finished = false, watchdog = null, startFallback = null;
+            function finish() {
+                if (finished || token !== speakToken) return;
+                finished = true;
+                clearTimeout(watchdog); clearTimeout(startFallback);
+                stopTalk();
+                if (done) done();
+            }
+            var est = estimateMs();
+            watchdog = setTimeout(finish, est * 2 + 5000);
+
+            if (!window.speechSynthesis || typeof SpeechSynthesisUtterance === 'undefined') {
+                startTalk();
+                setTimeout(finish, est);
+                return;
+            }
+            try { if (speechSynthesis.speaking || speechSynthesis.pending) speechSynthesis.cancel(); } catch (e) {}
+
+            var u = new SpeechSynthesisUtterance(texto);
+            u.lang = CONFIG.LANG;
+            var v = pickVoice();
+            if (v) u.voice = v;
+            u.rate = currentRate();
+            u.onstart = function () { if (token === speakToken) { clearTimeout(startFallback); startTalk(); } };
+            u.onboundary = function (e) { if (token === speakToken) onBoundary(e); };
+            u.onend = finish;
+            u.onerror = finish;
+            startFallback = setTimeout(function () { if (token === speakToken && !talk.on) startTalk(); }, 1500);
+            try { speechSynthesis.speak(u); } catch (e2) { finish(); }
+        }
+
+        // =====================================================
+        //  CLAUDE
+        // =====================================================
+        function parseReply(raw) {
+            var clean = String(raw).replace(/```json|```/g, '').trim();
+            var a = clean.indexOf('{'), b = clean.lastIndexOf('}');
+            try {
+                var obj = JSON.parse(clean.slice(a, b + 1));
+                var texto = String(obj.texto || '').trim();
+                if (!texto) throw new Error('sin texto');
+                return { texto: texto, emocion: obj.emocion || 'neutral' };
+            } catch (e) {
+                return { texto: clean || 'Perdona, no te he entendido bien.', emocion: 'neutral' };
+            }
+        }
+
+        function withTimeout(promise, ms) {
+            return new Promise(function (resolve, reject) {
+                var t = setTimeout(function () { var e = new Error('timeout'); e.timeout = true; reject(e); }, ms);
+                promise.then(function (v) { clearTimeout(t); resolve(v); }, function (e) { clearTimeout(t); reject(e); });
+            });
+        }
+
+        function callClaude() {
+            var headers = { 'content-type': 'application/json' };
+            var url = CONFIG.PROXY_URL || CONFIG.API_URL;
+            if (!CONFIG.PROXY_URL) {
+                headers['x-api-key'] = store.get('key') || '';
+                headers['anthropic-version'] = '2023-06-01';
+                headers['anthropic-dangerous-direct-browser-access'] = 'true';
+            }
+            var body = JSON.stringify({ model: CONFIG.MODEL, max_tokens: 300, system: SYSTEM_PROMPT, messages: history });
+            return withTimeout(fetch(url, { method: 'POST', headers: headers, body: body }), CONFIG.API_TIMEOUT_MS)
+                .then(function (res) {
+                    if (!res.ok) { var err = new Error('API ' + res.status); err.status = res.status; throw err; }
+                    return res.json();
+                })
+                .then(function (data) {
+                    var raw = '';
+                    for (var i = 0; i < data.content.length; i++) if (data.content[i].type === 'text') raw += data.content[i].text;
+                    return parseReply(raw);
+                });
+        }
+
+        function trimHistory() {
+            history = history.slice(-CONFIG.MAX_HISTORY);
+            while (history.length && history[0].role !== 'user') history.shift();
+        }
+
+        function ask(text) {
+            var req = ++reqId;
+            accepting = false;
+            clearTimeout(idleTimer);
+            setPhase('thinking', 'Tú: ' + text);
+            history.push({ role: 'user', content: text });
+            trimHistory();
+            callClaude().then(function (reply) {
+                if (req !== reqId || !active) return;
+                history.push({ role: 'assistant', content: reply.texto });
+                trimHistory();
+                speak(reply.texto, reply.emocion, afterSpeech, true);
+            }).catch(function (err) {
+                if (req !== reqId || !active) return;
+                history.pop();
+                if (err && err.status === 401) {
+                    pauseConversation('La clave de Claude no es válida');
+                    openSettings('La clave de Claude no es válida. Escríbela de nuevo.');
+                    return;
+                }
+                var msg = 'Perdona, he tenido un problema para pensar la respuesta. ¿Lo intentamos otra vez?';
+                if (err && err.timeout) msg = 'Perdona, he tardado demasiado en responder. ¿Me lo repites?';
+                else if (err && (err.status === 429 || err.status === 529)) msg = 'Ahora mismo hay mucha gente hablando conmigo. Inténtalo dentro de un momento.';
+                else if (err && !err.status) msg = 'Perdona, parece que no tengo conexión a internet.';
+                speak(msg, 'triste', afterSpeech);
+            });
+        }
+
+        // =====================================================
+        //  INTERRUMPIR AL AGENTE
+        // =====================================================
+        function bargeMode() { return store.get('barge') === 'voz' ? 'voz' : 'touch'; }
+
+        function norm(t) {
+            t = String(t || '').toLowerCase();
+            try { t = t.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch (e) {}
+            return t.replace(/[^a-z0-9\s]/g, ' ');
+        }
+        function wordsOf(t) { return norm(t).split(/\s+/).filter(function (w) { return w; }); }
+        function wordMap(t) {
+            var m = {}, ws = wordsOf(t);
+            for (var i = 0; i < ws.length; i++) m['_' + ws[i]] = true;
+            return m;
+        }
+        // ¿Lo que se oye lo dice otra persona? Varias palabras seguidas que el agente no ha dicho delatan una voz distinta.
+        function heardIsUser(e) {
+            var heard = '';
+            for (var i = e.resultIndex; i < e.results.length; i++) heard += ' ' + e.results[i][0].transcript;
+            var ws = wordsOf(heard), run = 0, maxRun = 0;
+            for (var j = 0; j < ws.length; j++) {
+                if (!agentWords['_' + ws[j]]) { run++; if (run > maxRun) maxRun = run; }
+                else run = 0;
+            }
+            return maxRun >= 2;       // dos o más palabras seguidas que el agente no ha dicho
+        }
+        // Quita del texto las palabras que son eco de la voz del agente
+        function stripWords(text, set) {
+            var parts = String(text).split(/\s+/), keep = [];
+            for (var i = 0; i < parts.length; i++) {
+                var w = wordsOf(parts[i])[0];
+                if (!w || !set['_' + w]) keep.push(parts[i]);
+            }
+            return keep.join(' ');
+        }
+        // Se avisa a Claude de que su respuesta quedó a medias
+        function markInterrupted() {
+            var last = history[history.length - 1];
+            if (speakingClaude && last && last.role === 'assistant' && last.content.indexOf('[Te interrumpieron') === -1) {
+                last.content += ' [Te interrumpieron antes de que terminaras.]';
+            }
+        }
+        // Interrupción tocando la pantalla
+        function interruptNow() {
+            if (!active || phase !== 'speaking') return;
+            markInterrupted();
+            cancelSpeech();
+            setPhase('listening', 'Te escucho…');
+            setTimeout(function () { if (active && phase === 'listening') listen(); }, 250);
+        }
+        // Interrupción hablando encima (modo experimental)
+        function startBarge(e, r) {
+            markInterrupted();
+            cancelSpeech();
+            accepting = true;
+            r._skip = e.resultIndex - 1;
+            r._stripFrom = e.resultIndex;
+            r._strip = agentWords;
+            setPhase('listening', 'Te escucho…');
+            resetIdle();
+        }
+
+        // =====================================================
+        //  ESCUCHAR (reconocimiento de voz)
+        //  Se abre UNA sola sesión de reconocimiento y se mantiene abierta durante toda la
+        //  conversación, para que el navegador pregunte por el micrófono solo al empezar.
+        //  Mientras el agente piensa o habla, lo que se oye se descarta.
+        // =====================================================
+        var accepting = false, idleTimer = null;
+
+        function stopRecognition() {
+            accepting = false;
+            clearTimeout(idleTimer);
+            if (!rec) return;
+            var r = rec; rec = null;
+            r.onresult = r.onerror = r.onend = r.onstart = null;
+            try { r.abort(); } catch (e) {}
+        }
+
+        function resetIdle() {
+            clearTimeout(idleTimer);
+            idleTimer = setTimeout(function () {
+                if (active && accepting) pauseConversation('No te oigo. Toca la pantalla para seguir');
+            }, CONFIG.IDLE_PAUSE_MS);
+        }
+
+        function startSession() {
+            if (!SR || rec) return;
+            var r = new SR();
+            rec = r;
+            r.lang = CONFIG.LANG;
+            r.interimResults = true;
+            r.continuous = true;
+            r._len = 0; r._skip = -1; r._done = -1; r._t0 = performance.now();
+            var lastError = '';
+
+            r.onresult = function (e) {
+                if (rec !== r) return;
+                var len = e.results.length;
+                r._len = len;
+                if (!accepting) {
+                    if (phase === 'speaking' && talking && bargeMode() === 'voz' && heardIsUser(e)) startBarge(e, r);
+                    else { r._skip = len - 1; return; }      // el agente habla o piensa: se descarta
+                }
+                var text = '', inter = '';
+                for (var i = e.resultIndex; i < len; i++) {
+                    if (i <= r._skip || i <= r._done) continue;
+                    var tr = e.results[i][0].transcript;
+                    if (r._strip && i === r._stripFrom) tr = stripWords(tr, r._strip);
+                    if (e.results[i].isFinal) { text += tr; r._done = i; } else inter += tr;
+                }
+                if (text.replace(/\s+/g, '').length > 0) {
+                    accepting = false;
+                    clearTimeout(idleTimer);
+                    r._skip = len - 1;
+                    r._strip = null;
+                    ask(text.trim());
+                } else if (inter) {
+                    setCaption('Tú: ' + inter);
+                    resetIdle();
+                }
+            };
+            r.onerror = function (e) { lastError = e.error || ''; };
+            r.onend = function () {
+                if (rec !== r) return;
+                rec = null;
+                if (!active) return;
+                if (lastError === 'not-allowed' || lastError === 'service-not-allowed') {
+                    pauseConversation('No tengo permiso para usar el micrófono');
+                } else if (lastError === 'audio-capture') {
+                    pauseConversation('No encuentro el micrófono');
+                } else if (lastError === 'network') {
+                    pauseConversation('El reconocimiento de voz no tiene conexión');
+                } else {
+                    var corta = performance.now() - r._t0 < 1500;   // evita bucles si la sesión se cierra al instante
+                    setTimeout(function () { if (active && !rec) startSession(); }, corta ? 1500 : 300);
+                }
+            };
+            try { r.start(); } catch (e2) { rec = null; setTimeout(function () { if (active && !rec) startSession(); }, 1000); }
+        }
+
+        function afterSpeech() { if (active) setTimeout(listen, 400); }
+
+        function listen() {
+            if (!active) return;
+            if (!SR) { pauseConversation('Este navegador no reconoce la voz'); return; }
+            if (rec) rec._skip = rec._len - 1;      // lo que se oyó antes (por ejemplo el eco de la voz) se descarta
+            else startSession();
+            accepting = true;
+            setPhase('listening', 'Te escucho…');
+            resetIdle();
+        }
+
+        // =====================================================
+        //  CONVERSACIÓN: empezar y pausar
+        // =====================================================
+        function hasKey() { return !!(CONFIG.PROXY_URL || store.get('key')); }
+
+        function keepAwake() {
+            try { if (navigator.wakeLock && navigator.wakeLock.request) navigator.wakeLock.request('screen').catch(function () {}); } catch (e) {}
+        }
+
+        function startConversation() {
+            if (!hasKey()) { openSettings('Escribe tu clave de Claude para empezar.'); return; }
+            active = true;
+            keepAwake();
+            if (SR) startSession();        // el permiso del micrófono se pide aquí, al empezar
+            if (!greeted) { greeted = true; speak(CONFIG.GREETING, 'saludo', function () { setEmotion('neutral'); afterSpeech(); }); }
+            else listen();
+        }
+
+        function pauseConversation(msg) {
+            active = false;
+            reqId++;
+            stopRecognition();
+            cancelSpeech();
+            setEmotion('neutral');
+            setPhase('idle', msg);
+        }
+
+        $('tapzone').addEventListener('click', function () {
+            if (!active) startConversation();
+            else if (phase === 'speaking') interruptNow();    // hablando: interrumpe y escucha
+            else pauseConversation();                          // escuchando o pensando: pausa
+        });
+
+        // =====================================================
+        //  AJUSTES
+        // =====================================================
+        function openSettings(msg) {
+            settingsMsg.textContent = msg || '';
+            keyInput.value = '';
+            rateInput.value = currentRate();
+            rateVal.textContent = currentRate();
+            bargeSel.value = bargeMode();
+            loadVoices();
+            settingsEl.style.display = 'block';
+        }
+        function closeSettings() { settingsEl.style.display = 'none'; }
+        function applySettings() {
+            var k = keyInput.value.replace(/\s+/g, '');
+            if (k) store.set('key', k);
+            store.set('voice', voiceSel.value);
+            store.set('rate', rateInput.value);
+            store.set('barge', bargeSel.value);
+        }
+
+        $('bGear').addEventListener('click', function () { if (active) pauseConversation(); openSettings(store.get('key') ? 'Ya hay una clave guardada. Déjalo vacío para conservarla.' : ''); });
+        $('bClose').addEventListener('click', closeSettings);
+        $('bSave').addEventListener('click', function () { applySettings(); closeSettings(); setCaption(HINTS.idle); });
+        $('bClearKey').addEventListener('click', function () { store.del('key'); settingsMsg.textContent = 'Clave borrada.'; });
+        $('showKey').addEventListener('change', function () { keyInput.type = this.checked ? 'text' : 'password'; });
+        rateInput.addEventListener('input', function () { rateVal.textContent = rateInput.value; });
+        $('bTestVoice').addEventListener('click', function () {
+            applySettings();
+            closeSettings();
+            speak('Hola, así suena mi voz. ¿Te gusta?', 'alegre', function () { setPhase('idle'); });
+        });
+
+        // =====================================================
+        //  MODO PRUEBA (?debug) y utilidades
+        // =====================================================
+        window.Cara = {
+            emotion: function (e) { setEmotion(e); },
+            say: function (t, e) { speak(t, e || 'alegre', function () { setPhase('idle'); }); }
+        };
+        $('dbgSend').addEventListener('click', function () {
+            var t = $('dbgText').value.trim();
+            if (!t) return;
+            $('dbgText').value = '';
+            if (!hasKey()) { openSettings('Escribe tu clave de Claude para probar.'); return; }
+            active = true;
+            greeted = true;
+            ask(t);
+        });
+
+        // =====================================================
+        //  ARRANQUE
+        // =====================================================
+        if (DEBUG) document.body.classList.add('debug');
+        if (window.speechSynthesis) {
+            loadVoices();
+            try { window.speechSynthesis.onvoiceschanged = loadVoices; } catch (e) {}
+        }
+        render();
+        setPhase('idle');
+        if (!SR) setCaption('Este navegador no reconoce la voz (usa ?debug para escribir)');
+        else if (!hasKey()) openSettings('Escribe tu clave de Claude (solo se guarda en este aparato).');
+    })();
+    </script>
+</body>
+</html>
